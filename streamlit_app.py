@@ -191,11 +191,8 @@ def show_login():
             if st.form_submit_button("Make Admin",use_container_width=True):
                 ok,msg=set_admin(au,ak); (st.success if ok else st.error)(msg)
     st.divider()
-    #st.success("GitHub connected")
-    if gh_ok():
-        st.success("GitHub connected")
-    else:
-        st.warning("GitHub offline — use sidebar upload after login")
+    st.success("✅ GitHub connected") if gh_ok() else st.warning("⚠ GitHub offline — use sidebar upload after login")
+
 # ── SIDEBAR ───────────────────────────────────────────────────
 def show_sidebar(un,role):
     with st.sidebar:
@@ -204,7 +201,7 @@ def show_sidebar(un,role):
         st.divider()
         st.subheader("🔗 Data Source")
         if gh_ok():
-            st.success("GitHub — Auto sync")
+            st.success("✅ GitHub — Auto sync")
             if st.button("🔄 Refresh",use_container_width=True): st.cache_data.clear(); st.rerun()
         else:
             st.warning("⚠ GitHub offline")
@@ -240,12 +237,24 @@ def show_dashboard(un,role):
         st.info("**5-Year Comparison tab works now.** Run Colab to see forecast tabs (Monthly Forecast, Daily).")
     st.divider()
 
-    tab1,tab2,tab3,tab4,tab5=st.tabs(["📈 Daily Forecast","📅 Monthly Forecast","📊 5-Year Comparison","🎯 Accuracy","📋 All Results"])
+    tab1,tab2,tab3,tab4=st.tabs(["📈 Daily Forecast","📅 Monthly Forecast","📊 5-Year Comparison","📋 All Results"])
 
     # TAB 1 — DAILY
     with tab1:
         st.subheader("📊 Today — Predicted vs Actual")
-        if len(df_past)==0: st.info("No actual data. Run Colab first.")
+        if len(df_past)==0:
+            st.markdown("""
+<div style='background:linear-gradient(135deg,#1e3a5f,#1e293b);border:1px solid #2563eb;border-radius:12px;padding:24px 28px;margin-bottom:8px'>
+<h4 style='color:#60a5fa;margin:0 0 10px 0'>Today's Predicted vs Actual — Awaiting Data</h4>
+<p style='color:#94a3b8;margin:0 0 14px 0'>Actual hourly load data has not been uploaded yet for today. Once your Colab script runs and pushes the daily results CSV to GitHub, this section will automatically display:</p>
+<ul style='color:#cbd5e1;margin:0;padding-left:20px;line-height:2'>
+<li>Hour-by-hour <b>Predicted vs Actual</b> load comparison chart</li>
+<li><b>MAPE</b> (forecast accuracy %) and <b>RMSE</b> error metrics</li>
+<li>Today's <b>peak load</b> and <b>date</b> summary</li>
+</ul>
+<p style='color:#64748b;margin:14px 0 0 0;font-size:13px'>Steps: Run <code style='background:#0f172a;padding:2px 6px;border-radius:4px'>TN_3MONTH_FORECAST_V2.py</code> in Colab → it pushes results to GitHub → refresh this page.</p>
+</div>
+""", unsafe_allow_html=True)
         else:
             row=df_past.iloc[-1]; pred=g24(row,'pred'); actual=g24(row,'actual')
             mv=sf(row.get('mape')); rv=sf(row.get('rmse')); vp=[v for v in pred if v]
@@ -425,22 +434,8 @@ def show_dashboard(un,role):
             rows.append({"Year":yls[i].replace('\n',' '),"Avg Load (MW)":f"{av:,.0f}" if av else "—","Peak Load (MW)":f"{pk:,.0f}" if pk else "—","YoY Growth":yoy})
         st.dataframe(pd.DataFrame(rows),use_container_width=True,hide_index=True)
 
-    # TAB 4 — ACCURACY
+    # TAB 4 — ALL RESULTS
     with tab4:
-        if len(df_m)==0: st.info("Accuracy data appears after running Colab with actual daily files.")
-        else:
-            c1,c2=st.columns(2)
-            with c1:
-                fm=px.line(df_m,x="date",y="mape",title="MAPE % Over Days",markers=True,color_discrete_sequence=["#ea580c"])
-                fm.add_hline(y=df_m['mape'].mean(),line_dash="dash",line_color="red",annotation_text=f"Avg:{df_m['mape'].mean():.2f}%")
-                fm.update_layout(height=300,plot_bgcolor="rgba(0,0,0,0)",paper_bgcolor="rgba(0,0,0,0)"); st.plotly_chart(fm,use_container_width=True)
-            with c2:
-                fr=px.line(df_m,x="date",y="rmse",title="RMSE (MW) Over Days",markers=True,color_discrete_sequence=["#7c3aed"])
-                fr.add_hline(y=df_m['rmse'].mean(),line_dash="dash",line_color="red",annotation_text=f"Avg:{df_m['rmse'].mean():.0f} MW")
-                fr.update_layout(height=300,plot_bgcolor="rgba(0,0,0,0)",paper_bgcolor="rgba(0,0,0,0)"); st.plotly_chart(fr,use_container_width=True)
-
-    # TAB 5 — ALL RESULTS
-    with tab5:
         if df_roll is None or len(df_roll)==0: st.info("Results appear after running Colab.")
         else:
             st.subheader(f"All Results — {len(df_roll)} rows")
