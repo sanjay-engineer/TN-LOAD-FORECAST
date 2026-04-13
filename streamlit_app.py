@@ -191,7 +191,6 @@ def show_login():
             if st.form_submit_button("Make Admin",use_container_width=True):
                 ok,msg=set_admin(au,ak); (st.success if ok else st.error)(msg)
     st.divider()
-    try:
     if gh_ok():
         st.success("✅ GitHub connected")
     else:
