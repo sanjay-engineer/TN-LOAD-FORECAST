@@ -237,30 +237,10 @@ def show_dashboard(un,role):
         st.info("**5-Year Comparison tab works now.** Run Colab to see forecast tabs (Monthly Forecast, Daily).")
     st.divider()
 
-    tab1,tab2,tab3,tab4=st.tabs(["📈 Daily Forecast","📅 Monthly Forecast","📊 5-Year Comparison","📋 All Results"])
+    tab1,tab2,tab3=st.tabs(["📅 Monthly Forecast","📊 5-Year Comparison","📋 All Results"])
 
-    # TAB 1 — DAILY
+    # TAB 1 — MONTHLY FORECAST
     with tab1:
-        st.subheader("🔮 Tomorrow — Next Day Forecast")
-        if len(df_future)==0: st.info("No forecast data yet.")
-        else:
-            nr=df_future.iloc[0]; np_=g24(nr,'pred'); vnp=[v for v in np_ if v]
-            n1,n2,n3,n4=st.columns(4)
-            if vnp:
-                n1.markdown(f"<h3 style='color:#ea580c'>{max(vnp):,.0f} MW</h3><p style='color:#64748b;font-size:12px'>Peak</p>",unsafe_allow_html=True)
-                n2.markdown(f"<h3>{min(vnp):,.0f} MW</h3><p style='color:#64748b;font-size:12px'>Min</p>",unsafe_allow_html=True)
-                n3.markdown(f"<h3>{np.mean(vnp):,.0f} MW</h3><p style='color:#64748b;font-size:12px'>Average</p>",unsafe_allow_html=True)
-            n4.markdown(f"<h3 style='color:#7c3aed'>{nr['date']}</h3><p style='color:#64748b;font-size:12px'>Date</p>",unsafe_allow_html=True)
-            fn2=go.Figure()
-            fn2.add_trace(go.Scatter(x=hlbl,y=np_,name="Forecast",line=dict(color="#ea580c",width=3),mode="lines+markers",marker=dict(size=8,symbol="diamond"),fill="tozeroy",fillcolor="rgba(234,88,12,0.07)"))
-            if vnp:
-                ph=np_.index(max(vnp))
-                fn2.add_annotation(x=hlbl[ph],y=max(vnp),text=f"Peak:{max(vnp):,.0f} MW",showarrow=True,arrowhead=2,arrowcolor="#ea580c",font=dict(color="#ea580c",size=11),bgcolor="white",bordercolor="#ea580c",borderwidth=1.5,ay=-40)
-            fn2.update_layout(title=f"Tomorrow — {nr['date']}",xaxis_title="Hour",yaxis_title="Load (MW)",height=380,**BL)
-            st.plotly_chart(fn2,use_container_width=True)
-
-    # TAB 2 — MONTHLY FORECAST
-    with tab2:
         st.subheader("📅 Monthly Forecast — April · May · June 2026")
         mo_data={}
         for mo in [4,5,6]:
@@ -348,8 +328,8 @@ def show_dashboard(un,role):
                         st.plotly_chart(fdl,use_container_width=True)
                 st.divider()
 
-    # TAB 3 — 5-YEAR COMPARISON (always works — data embedded)
-    with tab3:
+    # TAB 2 — 5-YEAR COMPARISON (always works — data embedded)
+    with tab2:
         st.subheader("📊 5-Year Comparison — 2020 to 2026")
         st.caption("Historical data (2020–2025) embedded in app — charts always visible. 2026 forecast appears after running Colab.")
         sel_mn=st.selectbox("Select Month",["April","May","June"],key="s5")
@@ -404,8 +384,8 @@ def show_dashboard(un,role):
             rows.append({"Year":yls[i].replace('\n',' '),"Avg Load (MW)":f"{av:,.0f}" if av else "—","Peak Load (MW)":f"{pk:,.0f}" if pk else "—","YoY Growth":yoy})
         st.dataframe(pd.DataFrame(rows),use_container_width=True,hide_index=True)
 
-    # TAB 4 — ALL RESULTS
-    with tab4:
+    # TAB 3 — ALL RESULTS
+    with tab3:
         if df_roll is None or len(df_roll)==0: st.info("Results appear after running Colab.")
         else:
             st.subheader(f"All Results — {len(df_roll)} rows")
