@@ -191,7 +191,10 @@ def show_login():
             if st.form_submit_button("Make Admin",use_container_width=True):
                 ok,msg=set_admin(au,ak); (st.success if ok else st.error)(msg)
     st.divider()
-    st.success("✅ GitHub connected") if gh_ok() else st.warning("⚠ GitHub offline — use sidebar upload after login")
+    if gh_ok():
+        st.success("GitHub connected") 
+    else:
+        st.warning("GitHub offline — use sidebar upload after login")
 
 # ── SIDEBAR ───────────────────────────────────────────────────
 def show_sidebar(un,role):
@@ -201,8 +204,8 @@ def show_sidebar(un,role):
         st.divider()
         st.subheader("🔗 Data Source")
         if gh_ok():
-            st.success("✅ GitHub — Auto sync")
-            if st.button("🔄 Refresh",use_container_width=True): st.cache_data.clear(); st.rerun()
+            st.success("GitHub — Auto sync")
+            if st.button("Refresh",use_container_width=True): st.cache_data.clear(); st.rerun()
         else:
             st.warning("⚠ GitHub offline")
         if role=="admin":
