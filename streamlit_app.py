@@ -191,7 +191,13 @@ def show_login():
             if st.form_submit_button("Make Admin",use_container_width=True):
                 ok,msg=set_admin(au,ak); (st.success if ok else st.error)(msg)
     st.divider()
-    st.success("✅ GitHub connected") if gh_ok() else st.warning("⚠ GitHub offline — use sidebar upload after login")
+    try:
+    if gh_ok():
+        st.success("✅ GitHub connected")
+    else:
+        st.warning("⚠ GitHub offline — upload manually via sidebar")
+except Exception:
+    st.warning("⚠ GitHub status unknown")
 
 # ── SIDEBAR ───────────────────────────────────────────────────
 def show_sidebar(un,role):
