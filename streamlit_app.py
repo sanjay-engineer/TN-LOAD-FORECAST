@@ -241,36 +241,6 @@ def show_dashboard(un,role):
 
     # TAB 1 — DAILY
     with tab1:
-        st.subheader("📊 Today — Predicted vs Actual")
-        if len(df_past)==0:
-            st.markdown("""
-<div style='background:linear-gradient(135deg,#1e3a5f,#1e293b);border:1px solid #2563eb;border-radius:12px;padding:24px 28px;margin-bottom:8px'>
-<h4 style='color:#60a5fa;margin:0 0 10px 0'>Today's Predicted vs Actual — Awaiting Data</h4>
-<p style='color:#94a3b8;margin:0 0 14px 0'>Actual hourly load data has not been uploaded yet for today. Once your Colab script runs and pushes the daily results CSV to GitHub, this section will automatically display:</p>
-<ul style='color:#cbd5e1;margin:0;padding-left:20px;line-height:2'>
-<li>Hour-by-hour <b>Predicted vs Actual</b> load comparison chart</li>
-<li><b>MAPE</b> (forecast accuracy %) and <b>RMSE</b> error metrics</li>
-<li>Today's <b>peak load</b> and <b>date</b> summary</li>
-</ul>
-<p style='color:#64748b;margin:14px 0 0 0;font-size:13px'>Steps: Run <code style='background:#0f172a;padding:2px 6px;border-radius:4px'>TN_3MONTH_FORECAST_V2.py</code> in Colab → it pushes results to GitHub → refresh this page.</p>
-</div>
-""", unsafe_allow_html=True)
-        else:
-            row=df_past.iloc[-1]; pred=g24(row,'pred'); actual=g24(row,'actual')
-            mv=sf(row.get('mape')); rv=sf(row.get('rmse')); vp=[v for v in pred if v]
-            m1,m2,m3,m4=st.columns(4)
-            if mv:
-                col="green" if mv<5 else "orange" if mv<10 else "red"
-                m1.markdown(f"<h3 style='color:{col}'>{mv:.2f}%</h3><p style='color:#64748b;font-size:12px'>MAPE</p>",unsafe_allow_html=True)
-            if rv: m2.markdown(f"<h3>{rv:.0f} MW</h3><p style='color:#64748b;font-size:12px'>RMSE</p>",unsafe_allow_html=True)
-            if vp: m3.markdown(f"<h3 style='color:#2563eb'>{max(vp):,.0f} MW</h3><p style='color:#64748b;font-size:12px'>Peak</p>",unsafe_allow_html=True)
-            m4.markdown(f"<h3>{row['date']}</h3><p style='color:#64748b;font-size:12px'>Date</p>",unsafe_allow_html=True)
-            ft=go.Figure()
-            if any(v for v in actual): ft.add_trace(go.Scatter(x=hlbl,y=actual,name="Actual",line=dict(color="#16a34a",width=3),mode="lines+markers",marker=dict(size=7),fill="tozeroy",fillcolor="rgba(22,163,74,0.07)"))
-            ft.add_trace(go.Scatter(x=hlbl,y=pred,name="Predicted",line=dict(color="#2563eb",width=2.5,dash="dash"),mode="lines+markers",marker=dict(size=6)))
-            ft.update_layout(title=f"Predicted vs Actual — {row['date']}",xaxis_title="Hour",yaxis_title="Load (MW)",height=380,**BL)
-            st.plotly_chart(ft,use_container_width=True)
-        st.divider()
         st.subheader("🔮 Tomorrow — Next Day Forecast")
         if len(df_future)==0: st.info("No forecast data yet.")
         else:
