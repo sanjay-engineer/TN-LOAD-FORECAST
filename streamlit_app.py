@@ -27,7 +27,8 @@ import pickle
 import json
 
 # Deep Learning
-import tensorflow as tf
+def build_and_train(...):
+    import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout, BatchNormalization
 from tensorflow.keras.optimizers import Adam
