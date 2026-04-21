@@ -84,11 +84,6 @@ HIST_MONTHLY = {
     (2024,12):{"avg":14620,"peak":16980},(2025,12):{"avg":15180,"peak":17640},
 }
 
-# ── ALL MONTHS THAT CAN HAVE 2026 CSV DATA ─────────────────────
-# Apr/May/Jun = actual data saved by Colab Cell 8
-# Jul/Aug/Sep = LSTM forecast saved by Colab Cell 9
-ALL_2026_MONTHS = [4, 5, 6, 7, 8, 9, 10, 11, 12]
-
 HIST_DAILY = {
     (2020,4):{1:9761,2:9988,3:10146,4:10080,5:9952,6:9993,7:9754,8:9729,9:9157,10:8415,11:9038,12:9174,13:9683,14:9852,15:10037,16:10234,17:10413,18:10526,19:10256,20:10417,21:10393,22:10558,23:10677,24:10660,25:10388,26:9324,27:9337,28:9683,29:8917,30:9251},
     (2021,4):{1:14993,2:15119,3:15072,4:14563,5:15108,6:13072,7:14816,8:15156,9:15513,10:15620,11:14306,12:14710,13:14746,14:13765,15:12884,16:13612,17:13941,18:13291,19:14124,20:14412,21:14616,22:14671,23:14742,24:14978,25:13357,26:14417,27:14955,28:15165,29:15305,30:15289},
@@ -216,21 +211,7 @@ def read_csv(fn):
 def load_rolling(): return read_csv("rolling_results.csv")
 
 def load_mo(mo):
-    """Load CSV for any 2026 month (actual or forecast)."""
     return read_csv(f"{MONTH_NAMES[mo].lower()}_2026_results.csv")
-
-
-def load_mo_all():
-    """Load CSVs for ALL available 2026 months (Apr-Dec)."""
-    result = {}
-    for mo in ALL_2026_MONTHS:
-        df = load_mo(mo)
-        if df is not None and len(df) > 0:
-            df["day"] = pd.to_numeric(df["day"], errors="coerce")
-            df = df.dropna(subset=["day"]).sort_values("day")
-            df["day"] = df["day"].astype(int)
-            result[mo] = df
-    return result
 
 def sf(v):
     try: x=float(v); return None if np.isnan(x) else x
@@ -244,39 +225,19 @@ def get_forecast_months(df):
     return sorted([(int(y),int(m)) for y,m in
                    df[["year","month"]].drop_duplicates().values.tolist()])
 
-def get_2026_avg_peak_for_month(df_roll, sel_mo, fc_year, mo_data_all=None):
+def get_2026_avg_peak_for_month(df_roll, sel_mo, fc_year):
     """
-    Get 2026 avg/peak for any month.
-    Priority:
-      1. Per-month CSV (april_2026_results.csv etc) -- covers actual months
-      2. rolling_results.csv -- covers forecast months
-    Returns (avg, peak, label) or (None, None, None).
+    KEY FIX: Read 2026 avg/peak for any month directly from rolling_results.csv.
+    This works even if load_mo(sel_mo) returns None (e.g. April selected but
+    Colab pushed July data). Returns (avg, peak) or (None, None).
     """
-    # Check per-month CSV first (works for both actual and forecast months)
-    if mo_data_all and sel_mo in mo_data_all:
-        df_mo = mo_data_all[sel_mo]
-        avg  = pd.to_numeric(df_mo["predicted_avg"],  errors="coerce").mean()
-        peak = pd.to_numeric(df_mo["predicted_peak"], errors="coerce").max()
-        if pd.notna(avg):
-            # Detect if actual or forecast
-            if "actual_avg" in df_mo.columns:
-                actual_vals = pd.to_numeric(df_mo["actual_avg"], errors="coerce")
-                has_actual  = actual_vals.notna().any() and (actual_vals > 1).any()
-            else:
-                has_actual = False
-            label = "Actual" if has_actual else "Forecast"
-            return float(avg), (float(peak) if pd.notna(peak) else None), label
-
-    # Fallback: rolling_results.csv
-    if df_roll is not None and len(df_roll) > 0:
-        sub = df_roll[(df_roll["month"] == sel_mo) & (df_roll["year"] == fc_year)]
-        if len(sub) > 0:
-            avg  = pd.to_numeric(sub["predicted_avg"],  errors="coerce").mean()
-            peak = pd.to_numeric(sub["predicted_peak"], errors="coerce").max()
-            return (float(avg)  if pd.notna(avg)  else None,
-                    float(peak) if pd.notna(peak) else None,
-                    "Forecast")
-    return None, None, None
+    if df_roll is None or len(df_roll)==0: return None,None
+    sub=df_roll[(df_roll["month"]==sel_mo)&(df_roll["year"]==fc_year)]
+    if len(sub)==0: return None,None
+    avg=pd.to_numeric(sub["predicted_avg"],errors="coerce").mean()
+    peak=pd.to_numeric(sub["predicted_peak"],errors="coerce").max()
+    return (float(avg) if pd.notna(avg) else None,
+            float(peak) if pd.notna(peak) else None)
 
 def save_local(uf,fn):
     df=pd.read_csv(uf); df.to_csv(os.path.join(SHARED_DIR,fn),index=False)
@@ -373,9 +334,6 @@ def show_dashboard(un,role):
     fc_year=forecast_months[0][0] if forecast_months else 2026
     mn_labels=[MONTH_NAMES[mo] for mo in fc_month_nums]
 
-    # Load ALL available 2026 month CSVs (Apr-Dec, actual + forecast)
-    mo_data_all = load_mo_all()
-
     # ── TOP METRICS (4 clean metrics, no MAPE) ────────────────
     c1,c2,c3,c4=st.columns(4)
     c1.metric("📅 Training Data","Jan 2020 – Jun 2026")
@@ -402,11 +360,14 @@ def show_dashboard(un,role):
         "📈 5-Year Comparison"
     ])
 
-    # Load per-month data for forecast tabs (Tab1 + Tab2)
+    # Load per-month data once
     mo_data={}
     for mo in fc_month_nums:
-        df_mo=mo_data_all.get(mo)
+        df_mo=load_mo(mo)
         if df_mo is not None and len(df_mo)>0:
+            df_mo["day"]=pd.to_numeric(df_mo["day"],errors="coerce")
+            df_mo=df_mo.dropna(subset=["day"]).sort_values("day")
+            df_mo["day"]=df_mo["day"].astype(int)
             mo_data[mo]=df_mo
 
     # ===========================================================
@@ -616,31 +577,26 @@ def show_dashboard(un,role):
         st.subheader("📈 5-Year Comparison — 2020 to 2026")
         st.caption(
             "Historical 2020–2025 data embedded — charts always visible. "
-            "2026 bar shows for any month that has a CSV in GitHub "
-            "(Apr/May/Jun = actual data · Jul/Aug/Sep = LSTM forecast).")
+            "2026 bar shows if that month's data is in rolling_results.csv.")
 
         # Month selectbox — show all months with historical data
         avail_months=sorted([
             mo for mo in range(1,13)
             if any((yr,mo) in HIST_MONTHLY for yr in range(2020,2026))])
         mo_options=[MONTH_NAMES[mo] for mo in avail_months]
-        # Default to first available month that has 2026 data
+        # Default to first forecast month
         def_idx=0
-        available_2026 = [mo for mo in avail_months if mo in mo_data_all]
-        if available_2026:
-            def_idx = avail_months.index(available_2026[0])
-        elif fc_month_nums and fc_month_nums[0] in avail_months:
+        if fc_month_nums and fc_month_nums[0] in avail_months:
             def_idx=avail_months.index(fc_month_nums[0])
         sel_mn=st.selectbox("Select Month",mo_options,index=def_idx,key="cmp_mo")
         sel_mo=[m for m in avail_months if MONTH_NAMES[m]==sel_mn][0]
         color=MONTH_COLORS[sel_mo]
         ndays=calendar.monthrange(fc_year,sel_mo)[1]
 
-        # Get 2026 value: check month CSV first, then rolling_results
-        avg_2026, peak_2026, lbl_2026 = get_2026_avg_peak_for_month(
-            df_roll, sel_mo, fc_year, mo_data_all)
+        # KEY FIX: get 2026 value directly from rolling_results regardless of month
+        avg_2026, peak_2026 = get_2026_avg_peak_for_month(df_roll, sel_mo, fc_year)
 
-        # Build year lists for bar chart (2020-2026)
+        # Build year lists for bar chart
         yls=[]; yas=[]; yps=[]; ycs=[]
         for yr in range(2020,2026):
             d=HIST_MONTHLY.get((yr,sel_mo))
@@ -648,67 +604,16 @@ def show_dashboard(un,role):
             yls.append(str(yr)); yas.append(float(d["avg"]))
             yps.append(float(d["peak"])); ycs.append(YEAR_COLORS[yr])
 
-        # 2026 bar — show actual value if CSV exists, else "Run Colab"
+        # 2026 — ALWAYS add, even if None (shows grey "Run Colab" bar)
         if avg_2026 is not None:
-            bar_label_2026 = f"2026 ({lbl_2026})"
-            yls.append(bar_label_2026)
+            yls.append(f"{fc_year} (Forecast)")
             yas.append(avg_2026); yps.append(peak_2026)
             ycs.append(YEAR_COLORS[2026])
         else:
-            yls.append("2026 (Run Colab)")
-            yas.append(0.001); yps.append(None)
+            yls.append(f"{fc_year} (Run Colab)")
+            yas.append(0.001); yps.append(None)   # tiny non-zero so bar renders
             ycs.append("#cbd5e1")
 
-        # ── STATUS BANNER ─────────────────────────────────────
-        if avg_2026 is not None:
-            banner_color = "#16a34a" if lbl_2026 == "Actual" else "#dc2626"
-            banner_icon  = "✅" if lbl_2026 == "Actual" else "🔮"
-            st.markdown(
-                f"<div style='background:{banner_color};color:white;padding:10px 18px;"
-                f"border-radius:8px;margin-bottom:12px;font-size:14px'>"
-                f"{banner_icon} <b>2026 data available for {sel_mn} — "
-                f"{lbl_2026} data</b> &nbsp;·&nbsp; "
-                f"Avg <b>{avg_2026:,.0f} MW</b>"
-                f"{f' · Peak <b>{peak_2026:,.0f} MW</b>' if peak_2026 else ''}"
-                f"</div>",
-                unsafe_allow_html=True)
-        else:
-            st.warning(f"⚠ No 2026 data for {sel_mn} yet — run Colab notebook and push to GitHub.")
-
-        # ── MAIN BAR CHART: Monthly avg & peak by year ────────
-        st.markdown(f"### 📊 {sel_mn} — Monthly Avg & Peak by Year (2020–2026)")
-        fig_bar=go.Figure()
-        fig_bar.add_trace(go.Bar(
-            x=yls, y=yas,
-            name="Monthly Avg (MW)",
-            marker_color=ycs, opacity=0.90,
-            text=[f"{v:,.0f}" if v>1 else "Run Colab" for v in yas],
-            textposition="outside",
-            textfont=dict(size=12,family="Arial Black")))
-        # Peak dotted line
-        valid_pk=[(l,p) for l,p in zip(yls,yps) if p is not None]
-        if valid_pk:
-            lbl_pk,val_pk=zip(*valid_pk)
-            fig_bar.add_trace(go.Scatter(
-                x=list(lbl_pk), y=list(val_pk),
-                name="Monthly Peak (MW)",
-                mode="lines+markers",
-                line=dict(color="#dc2626",width=2.5,dash="dot"),
-                marker=dict(size=11,symbol="triangle-up",color="#dc2626")))
-        # 2026 subtitle
-        if avg_2026 is not None:
-            sub_color = "#16a34a" if lbl_2026 == "Actual" else "#dc2626"
-            sub_text  = (f"<br><sup style='color:{sub_color}'>"
-                         f"2026 = {lbl_2026} data · {avg_2026:,.0f} MW avg</sup>")
-        else:
-            sub_text  = "<br><sup style='color:#94a3b8'>2026 = Run Colab notebook to see data</sup>"
-        fig_bar.update_layout(
-            title=dict(
-                text=(f"<b>{sel_mn} — Monthly Avg & Peak Load 2020–2026</b>" + sub_text),
-                font=dict(size=16)),
-            xaxis_title="Year", yaxis_title="Load (MW)",
-            height=520, **BL)
-        st.plotly_chart(fig_bar, use_container_width=True)
 
         # ── YoY GROWTH TABLE ──────────────────────────────────
         st.markdown(f"#### {sel_mn} — Year-on-Year Growth")
@@ -741,22 +646,29 @@ def show_dashboard(un,role):
                 line=dict(color=YEAR_COLORS[yr],width=1.8,
                           dash="dot" if yr<2023 else "solid"),
                 mode="lines+markers",marker=dict(size=4),opacity=0.85))
-        # 2026 daily line — use per-month CSV (actual or forecast)
-        df_mo26 = mo_data_all.get(sel_mo)
+        # 2026 daily line (from per-month CSV if available)
+        df_mo26=load_mo(sel_mo)
         if df_mo26 is not None and len(df_mo26)>0:
             df_s=df_mo26.sort_values("day")
-            trace_label = f"2026 ({lbl_2026})" if avg_2026 is not None else "2026"
             fig1.add_trace(go.Scatter(
                 x=df_s["day"].tolist(),
                 y=pd.to_numeric(df_s["predicted_avg"],errors="coerce").tolist(),
-                name=trace_label,
+                name=f"{fc_year} Forecast",
                 line=dict(color=YEAR_COLORS[2026],width=3),
                 mode="lines+markers",marker=dict(size=7,symbol="diamond"),
                 fill="tozeroy",fillcolor="rgba(220,38,38,0.07)"))
+        elif avg_2026 is not None:
+            # We have avg from rolling_results but no daily detail for this month
+            fig1.add_annotation(
+                x=ndays//2,y=0.5,yref="paper",
+                text=f"<b>2026 daily line — push {sel_mn} CSV to GitHub to see</b>",
+                showarrow=False,font=dict(size=11,color="#dc2626"),
+                bgcolor="rgba(255,255,255,0.85)",
+                bordercolor="#dc2626",borderwidth=1)
         else:
             fig1.add_annotation(
                 x=ndays//2,y=0.5,yref="paper",
-                text=f"<b>2026 data — run Colab and push {sel_mn} CSV to GitHub</b>",
+                text=f"<b>2026 forecast — run Colab to see</b>",
                 showarrow=False,font=dict(size=11,color="#94a3b8"),
                 bgcolor="rgba(255,255,255,0.85)",
                 bordercolor="#94a3b8",borderwidth=1)
@@ -784,9 +696,8 @@ def show_dashboard(un,role):
                              if sf(r.get(f"pred_h{h:02d}")) is not None])
                  for h in range(24)]
             if any(v for v in h26 if v):
-                trace_label = f"2026 ({lbl_2026})" if avg_2026 is not None else "2026"
                 fig3.add_trace(go.Scatter(
-                    x=list(range(24)),y=h26,name=trace_label,
+                    x=list(range(24)),y=h26,name=f"{fc_year} Forecast",
                     line=dict(color=YEAR_COLORS[2026],width=3),
                     mode="lines+markers",marker=dict(size=6,symbol="diamond")))
         fig3.update_layout(
