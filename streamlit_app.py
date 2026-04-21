@@ -227,41 +227,17 @@ def get_forecast_months(df):
 
 def get_2026_avg_peak_for_month(df_roll, sel_mo, fc_year):
     """
-    FINAL FIX: Always return a visible 2026 bar value.
-    
-    Priority:
-    1. If rolling_results has data for the EXACT selected month -> use it
-    2. If rolling_results has data for OTHER months (e.g. Jul when Apr selected)
-       -> use the overall rolling forecast average so 2026 bar is always visible.
-       Label will clarify which months were actually forecasted.
-    3. If no data at all -> return None (bar shows "Run Colab")
-    
-    Returns: (avg, peak, label_suffix, exact_match)
+    KEY FIX: Read 2026 avg/peak for any month directly from rolling_results.csv.
+    This works even if load_mo(sel_mo) returns None (e.g. April selected but
+    Colab pushed July data). Returns (avg, peak) or (None, None).
     """
-    if df_roll is None or len(df_roll)==0:
-        return None, None, "", False
-
-    # Case 1: exact month match
-    sub_exact = df_roll[(df_roll["month"]==sel_mo) & (df_roll["year"]==fc_year)]
-    if len(sub_exact) > 0:
-        avg  = pd.to_numeric(sub_exact["predicted_avg"],  errors="coerce").mean()
-        peak = pd.to_numeric(sub_exact["predicted_peak"], errors="coerce").max()
-        if pd.notna(avg):
-            return float(avg), float(peak) if pd.notna(peak) else None, "", True
-
-    # Case 2: different months forecasted — use overall average
-    sub_all = df_roll[df_roll["year"]==fc_year]
-    if len(sub_all) > 0:
-        avg  = pd.to_numeric(sub_all["predicted_avg"],  errors="coerce").mean()
-        peak = pd.to_numeric(sub_all["predicted_peak"], errors="coerce").max()
-        # Build label showing which months were actually forecasted
-        fc_mos = sorted(sub_all["month"].dropna().unique().astype(int).tolist())
-        mo_abbr = "+".join([MONTH_NAMES[m][:3] for m in fc_mos])
-        suffix  = f"\n({mo_abbr} avg)"
-        if pd.notna(avg):
-            return float(avg), float(peak) if pd.notna(peak) else None, suffix, False
-
-    return None, None, "", False
+    if df_roll is None or len(df_roll)==0: return None,None
+    sub=df_roll[(df_roll["month"]==sel_mo)&(df_roll["year"]==fc_year)]
+    if len(sub)==0: return None,None
+    avg=pd.to_numeric(sub["predicted_avg"],errors="coerce").mean()
+    peak=pd.to_numeric(sub["predicted_peak"],errors="coerce").max()
+    return (float(avg) if pd.notna(avg) else None,
+            float(peak) if pd.notna(peak) else None)
 
 def save_local(uf,fn):
     df=pd.read_csv(uf); df.to_csv(os.path.join(SHARED_DIR,fn),index=False)
@@ -665,9 +641,8 @@ def show_dashboard(un,role):
         color=MONTH_COLORS[sel_mo]
         ndays=calendar.monthrange(fc_year,sel_mo)[1]
 
-        # FINAL FIX: always get a real number for 2026 bar
-        avg_2026, peak_2026, lbl_suffix, exact = get_2026_avg_peak_for_month(
-            df_roll, sel_mo, fc_year)
+        # KEY FIX: get 2026 value directly from rolling_results regardless of month
+        avg_2026, peak_2026 = get_2026_avg_peak_for_month(df_roll, sel_mo, fc_year)
 
         # Build year lists for bar chart
         yls=[]; yas=[]; yps=[]; ycs=[]
@@ -677,21 +652,14 @@ def show_dashboard(un,role):
             yls.append(str(yr)); yas.append(float(d["avg"]))
             yps.append(float(d["peak"])); ycs.append(YEAR_COLORS[yr])
 
-        # 2026 — ALWAYS add a bar
+        # 2026 — ALWAYS add, even if None (shows grey "Run Colab" bar)
         if avg_2026 is not None:
-            # Use real forecast value — exact month or overall average
-            bar_lbl = f"{fc_year}\nForecast{lbl_suffix}"
-            yls.append(bar_lbl)
-            yas.append(avg_2026)
-            yps.append(peak_2026)
+            yls.append(f"{fc_year} (Forecast)")
+            yas.append(avg_2026); yps.append(peak_2026)
             ycs.append(YEAR_COLORS[2026])
         else:
-            # Truly no data: show placeholder bar at estimated growth level
-            last_yr_avg = HIST_MONTHLY.get((2025, sel_mo), {}).get("avg")
-            placeholder  = float(last_yr_avg) * 1.05 if last_yr_avg else 16000.0
-            yls.append(f"{fc_year}\n(Run Colab)")
-            yas.append(placeholder)
-            yps.append(float(last_yr_avg)*1.06 if last_yr_avg else 19500.0)
+            yls.append(f"{fc_year} (Run Colab)")
+            yas.append(0.001); yps.append(None)   # tiny non-zero so bar renders
             ycs.append("#cbd5e1")
 
         # ── MAIN BAR CHART: Monthly avg & peak by year ────────
@@ -701,7 +669,7 @@ def show_dashboard(un,role):
             x=yls, y=yas,
             name="Monthly Avg (MW)",
             marker_color=ycs, opacity=0.90,
-            text=[f"{v:,.0f}" if v and v>100 else "" for v in yas],
+            text=[f"{v:,.0f}" if v>1 else "Run Colab" for v in yas],
             textposition="outside",
             textfont=dict(size=12,family="Arial Black")))
         # Peak dotted line
