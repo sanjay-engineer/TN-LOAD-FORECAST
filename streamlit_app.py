@@ -354,11 +354,10 @@ def show_dashboard(un,role):
     st.divider()
 
     # ── 4 TABS ────────────────────────────────────────────────
-    tab1,tab2,tab3,tab4 = st.tabs([
+    tab1,tab2,tab3 = st.tabs([
         "📊 Monthly Forecast",
         "🗓️ Day Viewer",
-        "📈 5-Year Comparison",
-        "📋 All Results"
+        "📈 5-Year Comparison"
     ])
 
     # Load per-month data once
@@ -382,53 +381,6 @@ def show_dashboard(un,role):
                     "Run the Colab notebook and push to GitHub.\n"
                     "Check the **5-Year Comparison** tab while waiting.")
         else:
-            # ── BIG COMBINED BAR CHART (main view) ────────────
-            st.markdown("### Combined 3-Month Forecast — Bar Chart")
-            fig_main=go.Figure()
-            xoff=0
-            tick_vals=[]; tick_texts=[]
-            for mo,df_mo in mo_data.items():
-                mn=MONTH_NAMES[mo]; color=MONTH_COLORS[mo]
-                days=df_mo["day"].tolist()
-                avgs=pd.to_numeric(df_mo["predicted_avg"],errors="coerce").tolist()
-                peaks=pd.to_numeric(df_mo["predicted_peak"],errors="coerce").tolist()
-                xs=[xoff+d for d in days]
-
-                fig_main.add_trace(go.Bar(
-                    x=xs, y=avgs, name=f"{mn} Avg",
-                    marker_color=color, opacity=0.88, width=0.85))
-                fig_main.add_trace(go.Scatter(
-                    x=xs, y=peaks, name=f"{mn} Peak",
-                    mode="lines", line=dict(color=color,width=1.8,dash="dot"),
-                    showlegend=True))
-                if xoff>0:
-                    fig_main.add_vline(x=xoff+0.5,line_dash="dash",
-                                        line_color="#94a3b8",opacity=0.5)
-                # Month label in middle
-                fig_main.add_annotation(
-                    x=xoff+len(days)/2, y=1, yref="paper",
-                    text=f"<b>{mn}</b>", showarrow=False,
-                    font=dict(size=14,color=color),
-                    bgcolor="rgba(255,255,255,0.7)",
-                    bordercolor=color, borderwidth=1,
-                    borderpad=3)
-                # Tick every 5 days
-                for d in days:
-                    if d%5==0 or d==1:
-                        tick_vals.append(xoff+d)
-                        tick_texts.append(str(d))
-                xoff+=calendar.monthrange(fc_year,mo)[1]
-
-            fig_main.update_layout(
-                title=dict(
-                    text=f"<b>{' + '.join(mn_labels)} {fc_year} — Daily Avg Load (MW)</b>",
-                    font=dict(size=17,color="#1e293b")),
-                xaxis=dict(tickmode="array",tickvals=tick_vals,
-                           ticktext=tick_texts,title="Day"),
-                yaxis_title="Avg Load (MW)",
-                height=500, barmode="group", **BL)
-            st.plotly_chart(fig_main, use_container_width=True)
-
             # ── PER-MONTH SECTION ─────────────────────────────
             st.divider()
             for mo in fc_month_nums:
@@ -785,92 +737,6 @@ def show_dashboard(un,role):
             yaxis_title="Avg Load (MW)",height=400,**BL)
         st.plotly_chart(fig3,use_container_width=True)
 
-    # ===========================================================
-    # TAB 4 — ALL RESULTS (full table, day 1 first)
-    # ===========================================================
-    with tab4:
-        st.subheader("📋 All Results — Complete Forecast Table")
-
-        if df_roll is None or len(df_roll)==0:
-            st.info("Results table will appear here after running the Colab notebook.")
-        else:
-            total=len(df_roll)
-
-            # Summary cards per month
-            cols_s=st.columns(len(fc_month_nums))
-            for i,mo in enumerate(fc_month_nums):
-                sub=df_roll[df_roll["month"]==mo]
-                if len(sub)==0: continue
-                avg=pd.to_numeric(sub["predicted_avg"],errors="coerce").mean()
-                pk=pd.to_numeric(sub["predicted_peak"],errors="coerce").max()
-                with cols_s[i]:
-                    st.markdown(
-                        f"<div style='background:{MONTH_COLORS[mo]};color:white;"
-                        f"padding:10px 14px;border-radius:8px;text-align:center'>"
-                        f"<b>{MONTH_NAMES[mo]}</b><br>"
-                        f"Avg: <b>{avg:,.0f} MW</b><br>"
-                        f"Peak: <b>{pk:,.0f} MW</b><br>"
-                        f"{len(sub)} days"
-                        f"</div>",
-                        unsafe_allow_html=True)
-            st.markdown(f"**Total: {total} days · {total*24:,} hourly predictions**")
-            st.divider()
-
-            # Build clean display table
-            cols=["date","month_name","day",
-                  "predicted_avg","predicted_peak",
-                  "mape","rmse","actual_avg","actual_peak"]
-            avail=[c for c in cols if c in df_roll.columns]
-            ds=df_roll[avail].copy()
-
-            # Sort by date — ensures Day 1 is always first row
-            ds["date"]=pd.to_datetime(ds["date"],errors="coerce")
-            ds=ds.sort_values("date").reset_index(drop=True)
-            ds["date"]=ds["date"].dt.strftime("%Y-%m-%d")
-
-            # Format numbers
-            for col in ["predicted_avg","predicted_peak"]:
-                if col in ds.columns:
-                    ds[col]=pd.to_numeric(ds[col],errors="coerce").apply(
-                        lambda x: f"{x:,.0f}" if pd.notna(x) else "--")
-
-            # Accuracy cols: show value or "--"
-            for col in ["mape","rmse","actual_avg","actual_peak"]:
-                if col in ds.columns:
-                    vals=pd.to_numeric(ds[col],errors="coerce")
-                    if col=="mape":
-                        ds[col]=vals.apply(lambda x:f"{x:.2f}%" if pd.notna(x) else "--")
-                    elif col=="rmse":
-                        ds[col]=vals.apply(lambda x:f"{x:.0f}" if pd.notna(x) else "--")
-                    else:
-                        ds[col]=vals.apply(lambda x:f"{x:,.0f}" if pd.notna(x) else "--")
-
-            rename_map={
-                "date":"Date","month_name":"Month","day":"Day",
-                "predicted_avg":"Pred Avg (MW)","predicted_peak":"Pred Peak (MW)",
-                "mape":"MAPE","rmse":"RMSE (MW)",
-                "actual_avg":"Actual Avg (MW)","actual_peak":"Actual Peak (MW)"
-            }
-            ds.columns=[rename_map.get(c,c) for c in ds.columns]
-            st.dataframe(ds,use_container_width=True,hide_index=True,height=540)
-
-            # Show info about "--" fields
-            has_actual=("Actual Avg (MW)" in ds.columns and
-                        (ds["Actual Avg (MW)"]!="--").any())
-            if not has_actual:
-                st.info(
-                    "ℹ️ **MAPE, RMSE, Actual Avg, Actual Peak** show '--' because "
-                    f"{' / '.join(mn_labels)} {fc_year} are future months — "
-                    "actual measured data does not exist yet.\n\n"
-                    "When actual data is available: upload in Colab Cell 3 and re-run → "
-                    "accuracy metrics appear here automatically.")
-
-            st.download_button(
-                "⬇ Download Full Results CSV",
-                df_roll.sort_values("date",key=lambda x:pd.to_datetime(x,errors="coerce"))
-                       .to_csv(index=False).encode(),
-                f"TN_Forecast_{'_'.join(mn_labels)}_{fc_year}.csv",
-                "text/csv", use_container_width=True)
 
 
 def main():
